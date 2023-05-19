@@ -69,6 +69,22 @@ Hint Resolve Pos2Nat.is_pos : crunch.
 
 Generalizable Variable X.
 
+(* Let rec *)
+
+(* 
+x: (Z -> X)
+e: (Z -> (Z -> X))
+f: (Z -> X) -> Y
+a: Z
+b: Z
+ *)
+Definition let_rec_binding {X Y} (bindexp : Z -> X) (a b : Z) (foo : (Z -> ( Z -> X ))) (inexp : (Z -> X) -> Y) := 
+  (* some kind of computation on (foo (bindexp basecase) *)
+  inexp bindexp.
+
+Notation "'tletrec' x ':=' [ a <= i < b ] e 'in' f" := (let_rec_binding (fun i => x) a b (fun i => e) (fun x => f))
+
+
 (* Let binding *)
 Definition let_binding {X Y} (bindexp : X) (inexp : X -> Y) :=
   inexp bindexp.
