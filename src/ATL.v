@@ -69,29 +69,12 @@ Hint Resolve Pos2Nat.is_pos : crunch.
 
 Generalizable Variable X.
 
-(* Let rec *)
-
-(* 
-x: (Z -> X)
-e: (Z -> (Z -> X))
-f: (Z -> X) -> Y
-a: Z
-b: Z
- *)
-Definition let_rec_binding {X Y} (bindexp : Z -> X) (a b : Z) (foo : (Z -> ( Z -> X ))) (inexp : (Z -> X) -> Y) := 
-  (* some kind of computation on (foo (bindexp basecase) *)
-  inexp bindexp.
-
-Notation "'tletrec' x ':=' [ a <= i < b ] e 'in' f" := (let_rec_binding (fun i => x) a b (fun i => e) (fun x => f))
-
-
 (* Let binding *)
 Definition let_binding {X Y} (bindexp : X) (inexp : X -> Y) :=
   inexp bindexp.
 
 Notation "'tlet' x ':=' e 'in' f" := (let_binding e (fun x => f))
                                        (at level 81).
-
 (* Iverson bracket *)
 Definition iverson `{TensorElem X} (b : bool) (e : X) :=
   scalar_mul (if b then 1%R else 0%R) e.
@@ -171,6 +154,67 @@ Definition get `{TensorElem X} (v : list X) (i : Z) : X :=
 Notation "x _[ i ; .. ; j ]" :=
   (get .. (get x i%Z) .. j%Z) (at level 33).
 
+(* Letrec binding*)
+
+Fixpoint let_rec_helper n x (f': Z -> (list R -> R)) : list (list R -> R) := 
+  match n with 
+  | O => []
+  | S n' => f' x :: let_rec_helper n' x (fun i => f' (i + 1)%Z)
+  end.
+
+Definition let_rec_binding {Y} (n : Z) (recurrence : (list R) -> Z -> R) (inexp : list R -> Y): Y :=
+  inexp (fold_left (fun v f' => v ++ [f' v]) (let_rec_helper (Z.to_nat n) 0 (fun i => (fun a => recurrence a i))) []).
+
+Notation "'tletrec' x ':=' [ 0 <= i < n ] e 'in' f" := 
+  (let_rec_binding n (fun x i => e) (fun x => f))
+    (at level 36,
+    e at level 36,
+    x, i, n at level 50).
+
+(* sets v[i] = x *)
+Fixpoint set_1d (v : list Z) (i : Z) (x : Z) : (list Z) :=
+  match v with 
+  | [] => []
+  | h::t =>
+    match i with 
+    | Z.neg _ => v
+    | _ =>
+      match Z.to_nat i with 
+      | O => x::t
+      | S i' => h::(set_1d t (i-1) x)
+      end  
+    end
+  end.
+
+Compute (set_1d [3%Z; 4%Z; 5%Z; 6%Z] 2 1%Z).
+
+Fixpoint set_2d (v : list (list Z)) (i j : Z) (x : Z) : (list (list Z)) :=
+  match v with 
+  | [] => []
+  | h::t => 
+    match i with 
+    | Z.neg _ => v
+    | _ => 
+      match Z.to_nat i with 
+      | O => (set_1d h j x)::t
+      | S i' => h::(set_2d t (i-1) j x)
+      end 
+    end
+  end.
+
+Compute (set_2d [[0%R; 0%R]; [1%R; 1%R]] 1 0 3%R).
+
+Fixpoint build_frame_2d (n m : nat) : list (list R) :=
+  match n with
+  | O => []
+  | S n' => (repeat 0%R m) :: build_frame_2d n' m
+  end.
+
+
+Fixpoint
+(* Definition let_rec_binding_2d {Y} (n1 n2 : Z) (recurrence : (list (list R)) -> Z -> R) (inexp : list (list R) -> Y): Y := 
+  inexp  *)
+  
 Arguments get : simpl never.
 
 (* This definition of adding tensors is intended for lists of same length but
@@ -659,3 +703,16 @@ Definition concat {X} `{TensorElem X} (l1 l2 : list X) : list X :=
       (|[Z.of_nat (length l1) <=? i]| l2 _[i - Z.of_nat (length l1)]).
 
 Infix "<++>" := concat (at level 34, left associativity).
+
+
+Compute ((GEN [0 <= i < 10] i) _[5]).
+
+Compute (tletrec a := [ 0 <= i < 10 ] 2%R in a).
+
+Compute (tletrec a := [ 0 <= i < 10 ] (1 + a _[i-1])%R in a).
+
+Compute (tletrec a := [ 0 <= i < 10 ] (|[i <=? 0]| 7 + |[0 <? i]| (a _[i-1] + 3))%R in a).
+
+Compute (tletrec a := [ 0 <= i < 3] ((|[i <=? 1]| 1) + |[1 <? i]| (a _[i-1] + a _[i-2]))%R in a).
+
+Compute (GEN [0 <= j < 2] (GEN [0 <= i < 10] (Z.to_nat(i) + Z.to_nat(i)))).

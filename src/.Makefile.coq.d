@@ -43,9 +43,9 @@ GatherScatter.vos GatherScatter.vok GatherScatter.required_vos: GatherScatter.v 
 Im2col.vo Im2col.glob Im2col.v.beautified Im2col.required_vo: Im2col.v ATL.vo Common.vo CommonTactics.vo Tactics.vo GenPushout.vo LetLifting.vo
 Im2col.vio: Im2col.v ATL.vio Common.vio CommonTactics.vio Tactics.vio GenPushout.vio LetLifting.vio
 Im2col.vos Im2col.vok Im2col.required_vos: Im2col.v ATL.vos Common.vos CommonTactics.vos Tactics.vos GenPushout.vos LetLifting.vos
-Blur.vo Blur.glob Blur.v.beautified Blur.required_vo: Blur.v ATL.vo Common.vo Reshape.vo Tactics.vo LetLifting.vo Div.vo GenPushout.vo CommonTactics.vo
-Blur.vio: Blur.v ATL.vio Common.vio Reshape.vio Tactics.vio LetLifting.vio Div.vio GenPushout.vio CommonTactics.vio
-Blur.vos Blur.vok Blur.required_vos: Blur.v ATL.vos Common.vos Reshape.vos Tactics.vos LetLifting.vos Div.vos GenPushout.vos CommonTactics.vos
+Blur.vo Blur.glob Blur.v.beautified Blur.required_vo: Blur.v ATL.vo Common.vo Reshape.vo Tactics.vo LetLifting.vo Div.vo GenPushout.vo CommonTactics.vo Normalize.vo
+Blur.vio: Blur.v ATL.vio Common.vio Reshape.vio Tactics.vio LetLifting.vio Div.vio GenPushout.vio CommonTactics.vio Normalize.vio
+Blur.vos Blur.vok Blur.required_vos: Blur.v ATL.vos Common.vos Reshape.vos Tactics.vos LetLifting.vos Div.vos GenPushout.vos CommonTactics.vos Normalize.vos
 CheckSafe.vo CheckSafe.glob CheckSafe.v.beautified CheckSafe.required_vo: CheckSafe.v ATL.vo Tactics.vo Div.vo Common.vo CommonTactics.vo Blur.vo
 CheckSafe.vio: CheckSafe.v ATL.vio Tactics.vio Div.vio Common.vio CommonTactics.vio Blur.vio
 CheckSafe.vos CheckSafe.vok CheckSafe.required_vos: CheckSafe.v ATL.vos Tactics.vos Div.vos Common.vos CommonTactics.vos Blur.vos
