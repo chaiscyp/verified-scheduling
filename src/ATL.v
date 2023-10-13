@@ -15,6 +15,9 @@ Set Warnings "-deprecate-hint-without-locality,-deprecated".
 Class TensorElem (A : Set) :=
   { null : A;
     bin : A -> A -> A;
+    set_R : A -> list Z -> R -> A;
+    set_Z : A -> list Z -> Z -> A;
+    append : A -> list A -> list A;
     shape : Set;
     scalar_mul : R -> A -> A;
     consistent : A -> shape -> Prop;
@@ -82,7 +85,14 @@ Definition iverson `{TensorElem X} (b : bool) (e : X) :=
 Notation "|[ b ]| e" := (iverson b%Z e)
                           (at level 80,
                            format "'[hv ' |[  b  ]| ']' '[hv '  e ']'").
-  
+
+Definition iverson_Z `{TensorElem X} (b : bool) (e : X) :=
+  if b then e else null.
+
+Notation "[{ b }] e" := (iverson_Z b%Z e) (
+  at level 80,
+  format "'[hv ' [{  b  }] ']' '[hv '  e ']'").
+
 (* Tensor generation *)
 Fixpoint gen_helper `{TensorElem X} n x (f' : Z -> X) : list X :=
   match n with
@@ -156,13 +166,13 @@ Notation "x _[ i ; .. ; j ]" :=
 
 (* Letrec binding*)
 
-Fixpoint let_rec_helper n x (f': Z -> (list R -> R)) : list (list R -> R) := 
+Fixpoint let_rec_helper `{TensorElem X} n x (f': Z -> (list X -> X)) : list (list X -> X) := 
   match n with 
   | O => []
   | S n' => f' x :: let_rec_helper n' x (fun i => f' (i + 1)%Z)
   end.
 
-Definition let_rec_binding {Y} (n : Z) (recurrence : (list R) -> Z -> R) (inexp : list R -> Y): Y :=
+Definition let_rec_binding `{TensorElem X} {Y} (n : Z) (recurrence : (list X) -> Z -> X) (inexp : list X -> Y): Y :=
   inexp (fold_left (fun v f' => v ++ [f' v]) (let_rec_helper (Z.to_nat n) 0 (fun i => (fun a => recurrence a i))) []).
 
 Notation "'tletrec' x ':=' [ 0 <= i < n ] e 'in' f" := 
@@ -172,7 +182,7 @@ Notation "'tletrec' x ':=' [ 0 <= i < n ] e 'in' f" :=
     x, i, n at level 50).
 
 (* sets v[i] = x *)
-Fixpoint set_1d (v : list Z) (i : Z) (x : Z) : (list Z) :=
+Fixpoint set_1d (v : list R) (i : Z) (x : R) : (list R) :=
   match v with 
   | [] => []
   | h::t =>
@@ -186,9 +196,9 @@ Fixpoint set_1d (v : list Z) (i : Z) (x : Z) : (list Z) :=
     end
   end.
 
-Compute (set_1d [3%Z; 4%Z; 5%Z; 6%Z] 2 1%Z).
+Compute (set_1d [3%R; 4%R; 5%R; 6%R] 2 1%R).
 
-Fixpoint set_2d (v : list (list Z)) (i j : Z) (x : Z) : (list (list Z)) :=
+Fixpoint set_2d (v : list (list R)) (i j : Z) (x : R) : (list (list R)) :=
   match v with 
   | [] => []
   | h::t => 
@@ -204,17 +214,61 @@ Fixpoint set_2d (v : list (list Z)) (i j : Z) (x : Z) : (list (list Z)) :=
 
 Compute (set_2d [[0%R; 0%R]; [1%R; 1%R]] 1 0 3%R).
 
+(* Fixpoint set_nd `{TensorElem X} (v : X) (indices : list Z) (x : R) : X :=
+  match v with 
+  | null => null
+  | hv::tv =>
+    match indices with 
+    | [] => []
+    | hi::ti =>
+      match hi with
+      | Z.neg _ => v
+      | _ => 
+        match Z.to_nat hi with
+        | O => (set_nd hv ti x)::tv
+        | S n' => hv::(set_nd tv (hi-1)::ti x)
+        end
+      end
+    end
+  end.  *)
+
 Fixpoint build_frame_2d (n m : nat) : list (list R) :=
   match n with
   | O => []
   | S n' => (repeat 0%R m) :: build_frame_2d n' m
   end.
 
+Compute (build_frame_2d 4 5).
 
-Fixpoint
-(* Definition let_rec_binding_2d {Y} (n1 n2 : Z) (recurrence : (list (list R)) -> Z -> R) (inexp : list (list R) -> Y): Y := 
-  inexp  *)
-  
+Fixpoint gen_comp_order_1d (n : nat) (x : Z) (accessor : Z -> (list (list R) -> list (list R))): list (list (list R) -> list (list R)) :=
+  match n with 
+  | O => []
+  | S n' => accessor x :: gen_comp_order_1d n' x (fun x' => accessor (x'+1)%Z)
+  end.
+
+(* Compute (gen_comp_order_1d 4 0 (fun i => (fun a => [[i%R]]))). *)
+
+Fixpoint gen_comp_order_2d (n m : nat) (x y : Z) (accessor : Z -> Z -> (list (list R) -> list (list R))) : list (list (list R) -> list (list R)) :=
+  match n with 
+  | O => []
+  | S n' => (gen_comp_order_1d m y (fun y' => accessor x y')) ++ gen_comp_order_2d n' m x y (fun x' y => accessor (x'+1)%Z y)
+  end.
+
+(* Compute (gen_comp_order_2d 2 3 0 0 (fun i j => (fun a => [[(123+i+j)%Z]]))). *)
+(* C = C[i-1][j] + C[i][j-1] *)
+Definition let_rec_binding_2d {Y} (n1 n2 : Z) (recurrence : (list (list R)) -> Z -> Z -> R) (inexp : list (list R) -> Y): Y := 
+  inexp (
+    fold_left (fun v f => f v) 
+    (gen_comp_order_2d (Z.to_nat n1) (Z.to_nat n2) 0 0 (fun x y => (fun a => set_2d a x y (recurrence a x y)))) 
+    (build_frame_2d (Z.to_nat n1) (Z.to_nat n2))
+  ).
+
+Notation "'tletrec2d' x ':=' [ 0 <= i < n ] [ 0 <= j < m ] e 'in' f" := 
+  (let_rec_binding_2d n m (fun x i j => e) (fun x => f))
+    (at level 36,
+    e at level 36,
+    x, i, j, n, m at level 50).
+
 Arguments get : simpl never.
 
 (* This definition of adding tensors is intended for lists of same length but
@@ -230,9 +284,41 @@ Fixpoint exists_fin' (i : nat) (p : nat -> Prop) : Prop :=
   | S i' => p 0 \/ exists_fin' i' (fun x => p (S x))
   end.
 
+Axiom cheating : forall A, A.
+#[refine] Instance ZTensorElem : TensorElem Z := {
+  null := 0%Z;
+  bin := Z.add;
+  set_R := fun a indices v => a; (* shoudln't set *)
+  set_Z := fun a indices v => v;
+  append := fun a A => A ++ [a];
+  shape := unit;
+  scalar_mul := fun _ x => x;
+  consistent _ _ := True;
+}.
+Proof.
+  - intros. ring.
+  - intros. ring.
+  - intros. ring.
+  - intros. apply cheating.
+  - intros. apply cheating.
+  - intros. trivial.
+  - intros. trivial.
+  - intros. ring.
+  - intros. ring.
+  - intros. ring.
+  - destruct s1. destruct s2. auto.
+  - apply cheating.
+  - intros. trivial.
+  - apply cheating.
+  (* - intros. ring. *)
+Defined.
+
 #[refine] Instance RTensorElem : TensorElem R :=
   { null := 0;
     bin := Rplus;
+    set_R := fun a indices v => v;
+    set_Z := fun a indices v => a; (* shouldn't set *)
+    append := fun a A => A ++ [a];
     shape := unit;
     consistent _ _ := True;
     scalar_mul := Rmult;
@@ -423,9 +509,56 @@ Proof.
   simpl in *. lia.
 Qed.
 
+Fixpoint listSet_RAux `{TensorElem X} (arr : list X) (indices : list Z) (v : R) : list X :=
+  match indices with 
+  | [] => arr
+  | hi :: ti => 
+    match hi with 
+    | Z.neg _ => arr
+    | _ => 
+      match Z.to_nat hi with 
+      | O => 
+        match arr with 
+        | [] => (set_R null ti v) :: []
+        | harr :: tarr => (set_R harr ti v) :: tarr
+        end
+      | S hi' =>
+        match arr with
+        | [] => (repeat null (S hi')) ++ [set_R null ti v]
+        | harr :: tarr => harr :: (listSet_RAux tarr ((hi-1)%Z::ti) v)
+        end
+      end
+    end
+  end.
+
+Fixpoint listSet_ZAux {X} `{TensorElem X} (arr : list X) (indices : list Z) (v : Z) : list X :=
+  match indices with 
+  | [] => arr
+  | hi :: ti => 
+    match hi with 
+    | Z.neg _ => arr
+    | _ => 
+      match Z.to_nat hi with 
+      | O => 
+        match arr with 
+        | [] => (set_Z null ti v) :: []
+        | harr :: tarr => (set_Z harr ti v) :: tarr
+        end
+      | S hi' =>
+        match arr with
+        | [] => (repeat null (S hi')) ++ [set_Z null ti v]
+        | harr :: tarr => harr :: (listSet_ZAux tarr ((hi-1)%Z::ti) v)
+        end
+      end
+    end
+  end.
+
 #[refine]Instance TensorTensorElem {X} `{TensorElem X} : TensorElem (list X) :=
   { null := [];
     bin := tensor_add;
+    set_R := listSet_RAux;
+    set_Z := listSet_ZAux;
+    append := fun a A => A ++ [a];
     shape := nat * (@shape X _);
     consistent := tensor_consistent;
     scalar_mul c l := map (scalar_mul c) l }.
@@ -629,6 +762,9 @@ Defined.
   { null := (null,null);
     bin x y := match x,y with
                  (a,b),(c,d) => (bin a c, bin b d) end;
+    set_R := fun a indices v => a; (* Fix this *)
+    set_Z := fun a indices v => a; (* Fix this *)
+    append := fun a A => A; (*Fix this*)
     shape := (@shape X _ * @shape Y _);
     scalar_mul c tup := match tup with
                           (x,y) => (scalar_mul c x, scalar_mul c y) end;
@@ -704,15 +840,95 @@ Definition concat {X} `{TensorElem X} (l1 l2 : list X) : list X :=
 
 Infix "<++>" := concat (at level 34, left associativity).
 
+Example test_listSet_basic :
+  listSet_RAux [0%R; 1%R; 2%R] [1%Z] 3%R = 
+  [0%R; 3%R; 2%R].
+Proof. reflexivity. Qed.
 
-Compute ((GEN [0 <= i < 10] i) _[5]).
+Example test_listSet_construct :
+  listSet_RAux [0%R; 1%R] [3%Z] 123%R = 
+  [0%R; 1%R; 0%R; 123%R].
+Proof. reflexivity. Qed.
 
-Compute (tletrec a := [ 0 <= i < 10 ] 2%R in a).
+Example test_listSet_2d :
+  listSet_RAux [[0%R; 1%R; 2%R]; [3%R; 4%R; 5%R]] [1%Z; 2%Z] 123%R =
+  [[0%R; 1%R; 2%R]; [3%R; 4%R; 123%R]].
+Proof. reflexivity. Qed.
 
-Compute (tletrec a := [ 0 <= i < 10 ] (1 + a _[i-1])%R in a).
+Example test_listSet_Construct_2d_1 :
+  listSet_RAux [] [1%Z; 2%Z] 345%R =
+  [[]; [0%R; 0%R; 345%R]].
+Proof. reflexivity. Qed.
 
-Compute (tletrec a := [ 0 <= i < 10 ] (|[i <=? 0]| 7 + |[0 <? i]| (a _[i-1] + 3))%R in a).
+Example test_listSet_Construct_2d_bad :
+  listSet_RAux [[1%R; 2%R; 3%R]] [1%Z] 345%R = 
+  [[1%R; 2%R; 3%R]; []].
+Proof. simpl. reflexivity. Qed.
 
-Compute (tletrec a := [ 0 <= i < 3] ((|[i <=? 1]| 1) + |[1 <? i]| (a _[i-1] + a _[i-2]))%R in a).
+Example test_listSet_Construct_3d :
+  listSet_RAux [[[0%R; 1%R; 2%R]; [3%R; 4%R; 5%R]]; [[1%R]; [2%R]]] [1%Z; 1%Z; 3%Z] 345%R = 
+  [[[0%R; 1%R; 2%R]; [3%R; 4%R; 5%R]]; [[1%R]; [2%R; 0%R; 0%R; 345%R]]].
+Proof. simpl. reflexivity. Qed.
 
-Compute (GEN [0 <= j < 2] (GEN [0 <= i < 10] (Z.to_nat(i) + Z.to_nat(i)))).
+Compute (tletrec a := [ 0 <= i < 10 ] (-2 +1)%Z in a).
+
+Compute (tletrec a := [ 0 <= i < 10 ] (2 + a _[i-1])%Z in a).
+
+Compute (tletrec a := [ 0 <= i < 10 ] ( [{i <=? 5}] 1 )%Z in a).
+
+Fixpoint gen_range_helper (from : Z) (rem : nat) (fn : Z -> Z) :=
+  match rem with 
+  | O => []
+  | S rem' => (fn from) :: gen_range_helper from rem' (fun x => fn (x+1)%Z)
+  end.
+
+Definition gen_range (from to: Z) : list Z := 
+  gen_range_helper from (Z.to_nat (to-from)) (fun i => i).
+
+Example test_gen_range_1 : 
+  gen_range 2%Z 5%Z = 
+  [2%Z; 3%Z; 4%Z].
+Proof. reflexivity. Qed.
+
+Example test_gen_range_2 :
+  gen_range 1%Z 1%Z = [].
+Proof. reflexivity. Qed.
+
+Example test_gen_range_3 :
+  gen_range 1%Z 0%Z = [].
+Proof. reflexivity. Qed.
+
+Example test_gen_rec_1d :
+  (GEN_REC [i < 5] fun a => set_Z a [i] (a _[i-1] + 2)%Z) [] = 
+  [2%Z; 4%Z; 6%Z; 8%Z; 10%Z].
+Proof. simpl. reflexivity. Qed.
+
+Example test_gen_rec_sum :
+  (GEN_REC [i < 5] fun sm => set_Z sm [i] (sm _[i-1] + 1 + i)%Z) [] = 
+  [1%Z; 3%Z; 6%Z; 10%Z; 15%Z].
+Proof. unfold gen_rec. simpl. reflexivity. Qed.
+
+Example test_gen_rec_1d_more : 
+  (GEN_REC [i < 5] fun sm => set_Z sm [i] (sm _[i-1])%Z) [] = 
+  [0%Z; 0%Z; 0%Z; 0%Z; 0%Z].
+Proof. reflexivity. Qed.
+
+Example test_gen_rec_2d :
+  (GEN_REC [i < 3] (GEN_REC [j < 2] fun C => set_Z C [i; j] (C _[i; j-1] + i)%Z)) [] = 
+  [[0%Z; 0%Z]; [1%Z; 2%Z]; [2%Z; 4%Z]].
+Proof. reflexivity. Qed.
+
+(* Do the version without decoupling; basically take the whole thing at once. *)
+(* And then prove that the whole thing is equivalent. *)
+(* Prove correctness, says sth about any element in the thing. *)
+(* Invariance: true for any array passed in. *)
+(* Start with top level theorem *)
+
+(* Example test_gen_rec_new_1d :
+  (tletrecnew A := GEN_REC_NEW [ i < 5 ] (A _[i-1] + A _[i-2])%Z in A)= 
+  [2%Z; 4%Z; 6%Z; 8%Z; 10%Z].
+Proof. simpl. reflexivity. Qed. *)
+
+Compute ((GEN_REC [ i < 10 ] (fun fib => (fib _[i-1] + 2)%Z) ).
+
+Compute (GEN [ i < 2 ] GEN [j < 2] (i <+> j)).
