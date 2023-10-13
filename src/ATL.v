@@ -755,4 +755,96 @@ Definition concat {X} `{TensorElem X} (l1 l2 : list X) : list X :=
 
 Infix "<++>" := concat (at level 34, left associativity).
 
+Fixpoint gen_range_helper (from : Z) (rem : nat) (fn : Z -> Z) :=
+  match rem with 
+  | O => []
+  | S rem' => (fn from) :: gen_range_helper from rem' (fun x => fn (x+1)%Z)
+  end.
+
+Definition gen_range (from to : Z) : list Z :=
+  gen_range_helper from (Z.to_nat (to-from)) (fun i => i).
+
+Example test_gen_range_1 : 
+  gen_range 2%Z 5%Z = 
+  [2%Z; 3%Z; 4%Z].
+Proof. reflexivity. Qed.
+
+Example test_gen_range_2 :
+  gen_range 1%Z 1%Z = [].
+Proof. reflexivity. Qed.
+
+Example test_gen_range_3 :
+  gen_range 1%Z 0%Z = [].
+Proof. reflexivity. Qed.
+
 (* Let rec binding *)
+Definition gen_rec `{TensorElem X} (n : Z) (fn : Z -> (X -> X)) : X -> X :=
+  fun prev_arr =>
+    fold_left 
+      (fun arr ind => (fn ind) arr)
+      (gen_range 0 n)
+      prev_arr.
+
+Notation "'GEN_REC' [ i < n ] e " := (gen_rec n (fun i => e))
+                                      (at level 36,
+                                      e at level 36,
+                                      i, n at level 50,
+                                      format
+                                      "'[hv ' 'GEN_REC'  [  i  <  n  ] ']' '//' e").
+
+Definition iverson_Z `{TensorElem X} (b : bool) (e : X) :=
+  (if b then e else null).
+
+Notation "|{ b }| e" := (iverson_Z b%Z e)
+                          (at level 35,
+                           format "'[hv ' |{  b  }| ']' '[hv '  e ']'").
+
+Example test_gen_rec_1d :
+  (GEN_REC [i < 5] fun a => set_Z a [i] (a _[i-1] + 2)%Z) [] = 
+  [2%Z; 4%Z; 6%Z; 8%Z; 10%Z].
+Proof. simpl. reflexivity. Qed.
+
+Example test_gen_rec_sum :
+  (GEN_REC [i < 5] fun sm => set_Z sm [i] (sm _[i-1] + 1 + i)%Z) [] = 
+  [1%Z; 3%Z; 6%Z; 10%Z; 15%Z].
+Proof. unfold gen_rec. simpl. reflexivity. Qed.
+
+Example test_gen_rec_1d_more : 
+  (GEN_REC [i < 5] fun sm => set_Z sm [i] (sm _[i-1])%Z) [] = 
+  [0%Z; 0%Z; 0%Z; 0%Z; 0%Z].
+Proof. reflexivity. Qed.
+
+Example test_gen_rec_2d :
+  (GEN_REC [i < 3] (GEN_REC [j < 2] fun C => set_Z C [i; j] (C _[i; j-1] + i)%Z)) [] = 
+  [[0%Z; 0%Z]; [1%Z; 2%Z]; [2%Z; 4%Z]].
+Proof. reflexivity. Qed.
+
+Example test_gen_rec_fibo :
+  (GEN_REC [i < 7] fun fib => 
+    set_Z fib [i] 
+    (|{i >? 1}| (fib _[i-1] + fib _[i-2]) + |{i <=? 1}| 1)%Z
+  ) [] = 
+  [1%Z; 1%Z; 2%Z; 3%Z; 5%Z; 8%Z; 13%Z].
+Proof. unfold gen_rec. simpl. reflexivity. Qed.
+
+Example test_gen_rec_binomial :
+  (
+    GEN_REC [i < 5] GEN_REC [j < 5]
+    fun C => 
+    set_Z C [i; j] 
+      (
+        |{i >=? j}| (
+          |{orb (j =? 0) (i =? j)}| 1 + 
+          |{andb (negb (j =? 0)) (j <? i)}| (C _[i-1; j] + C _[i-1; j-1])
+        )
+      )%Z
+  ) [] = 
+[[1%Z; 0%Z; 0%Z; 0%Z; 0%Z];
+[1%Z; 1%Z; 0%Z; 0%Z; 0%Z];
+[1%Z; 2%Z; 1%Z; 0%Z; 0%Z];
+[1%Z; 3%Z; 3%Z; 1%Z; 0%Z];
+[1%Z; 4%Z; 6%Z; 4%Z; 1%Z]].
+Proof. unfold gen_rec. simpl. reflexivity. Qed.
+
+
+
