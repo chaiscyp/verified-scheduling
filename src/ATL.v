@@ -846,5 +846,56 @@ Example test_gen_rec_binomial :
 [1%Z; 4%Z; 6%Z; 4%Z; 1%Z]].
 Proof. unfold gen_rec. simpl. reflexivity. Qed.
 
+Fixpoint gen_grid_helper (dims : list Z) : list (list Z) :=
+  match dims with 
+  | [] => [[]]
+  | h :: t => 
+    let rest := (gen_grid_helper t) in
+    flat_map (
+      fun x => map (fun r => x :: r) rest
+    ) (gen_range 0 h)
+  end.
 
+Example test_gen_grid_helper_1 :
+  gen_grid_helper [3%Z; 4%Z] =
+  [[0%Z; 0%Z]; [0%Z; 1%Z]; [0%Z; 2%Z]; [0%Z; 3%Z]; 
+  [1%Z; 0%Z]; [1%Z; 1%Z]; [1%Z; 2%Z]; [1%Z; 3%Z]; 
+  [2%Z; 0%Z]; [2%Z; 1%Z]; [2%Z; 2%Z]; [2%Z; 3%Z]].
+Proof. reflexivity. Qed.
 
+Notation "x _[ i ; .. ; j ]" :=
+  (get .. (get x i%Z) .. j%Z) (at level 33).
+
+Notation "'exists' x .. y , p" :=
+  (ex (fun x => .. (ex (fun y => p)) ..))
+  (at level 200, x binder, y binder, right associativity).
+
+(* Notation "'testee' [ a .. z ] e" := (fun a => .. (fun z => e) ..) 
+  (at level 33, a binder, z binder, right associativity). *)
+
+(* Compute ((testee [i j k] (i+j+k)) 1 4 6). *)
+
+(* Definition gen_rec_grid (grid : list (list Z)) rec  *)
+
+Notation "'GEN_REC_GRID' [ i1 ; .. ; ik ] [ dim_lims ] A := exp " := 
+  (fun i1 => .. (fun ik => (fun A => set_Z A (cons i1 .. (cons ik nil) ..) exp)) ..)
+  (at level 30, i1 closed binder, ik closed binder).
+
+From Coq Require Import Numbers.NaryFunctions.
+
+Compute (let v := fun x => (fst x + fst (snd x)) in  ncurry _ _ 2 v 4 5).
+
+Compute (nprod_of_list _ [1; 4; 5]).
+
+Compute (
+  let v := GEN_REC_GRID [i ; j] [1%Z ; 2%Z] C := 4%Z in
+  ((v 2%Z 3%Z) [])
+).
+
+(* 
+  (gen_rec n (fun i => e))
+  (at level 36,
+  e at level 36,
+  i, n at level 50,
+  format
+  "'[hv ' 'GEN_REC'  [  i  <  n  ] ']' '//' e"). *)
