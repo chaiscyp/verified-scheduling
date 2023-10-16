@@ -880,17 +880,63 @@ Notation "'exists' x .. y , p" :=
 Notation "'GEN_REC_GRID' [ i1 ; .. ; ik ] [ dim_lims ] A := exp " := 
   (fun i1 => .. (fun ik => (fun A => set_Z A (cons i1 .. (cons ik nil) ..) exp)) ..)
   (at level 30, i1 closed binder, ik closed binder).
-
+  
 From Coq Require Import Numbers.NaryFunctions.
+
+
+Compute (
+  let v := GEN_REC_GRID [i ; j] [1%Z] C := 4%Z in
+  ((v 2%Z 3%Z) [])
+).
+
+Compute (
+  nprod_of_list _ [1; 2; 3]
+).
+
+Fixpoint nuncurry' (A B:Type) n : (A^^n-->B) -> (A^n -> B) :=
+  match n return (A^^n-->B) -> (A^n -> B) with
+  | O => fun x _ => x
+  | S n => fun f p => let (x,p) := p in nuncurry' _ _ n (f x) p
+  end.
+Fixpoint nfun_to_nfun (A B C:Type)(f:B -> C) n :
+  (A^^n-->B) -> (A^^n-->C) :=
+  match n return (A^^n-->B) -> (A^^n-->C) with
+  | O => f
+  | S n => fun g a => nfun_to_nfun _ _ _ f n (g a)
+  end.
+
+(* Fixpoint uncurry_apply `{TensorElem X} (n : nat) (rec : Z^^n --> (X -> X)) (coord : list Z) : X -> X :=
+  match n return X -> X with
+  | O => fun x => x
+  | S n' => let '(h::t) := coord in uncurry_apply n' (rec h) coord
+  end.  *)
+
+Fixpoint Z_nprod_of_list (n : nat) (l : list Z) : Z^n :=
+  match n return Z^n with
+  | O => tt
+  | S n' =>
+    match l with 
+    | [] => (0%Z, Z_nprod_of_list n' l) (* shouldn't reach here *)
+    | h :: t => (h, Z_nprod_of_list n' t)
+    end
+  end.
+
+Definition compute_grid_helper `{TensorElem X} (grid : list (list Z)) (n : nat) (rec : Z^^n --> (X -> X)) := 
+  fun starting_arr =>
+    fold_left 
+      (
+        fun arr coord => 
+          (nuncurry _ _ n rec) (Z_nprod_of_list n coord) arr
+      )
+      grid
+      starting_arr.
+
+Compute (compute_grid_helper (gen_grid_helper [10%Z]) 1 (fun i fib => set_Z fib [i] (fib _[i-1] + 2)%Z)) [].
 
 Compute (let v := fun x => (fst x + fst (snd x)) in  ncurry _ _ 2 v 4 5).
 
 Compute (nprod_of_list _ [1; 4; 5]).
 
-Compute (
-  let v := GEN_REC_GRID [i ; j] [1%Z ; 2%Z] C := 4%Z in
-  ((v 2%Z 3%Z) [])
-).
 
 (* 
   (gen_rec n (fun i => e))
