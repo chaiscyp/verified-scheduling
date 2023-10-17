@@ -846,6 +846,8 @@ Example test_gen_rec_binomial :
 [1%Z; 4%Z; 6%Z; 4%Z; 1%Z]].
 Proof. unfold gen_rec. simpl. reflexivity. Qed.
 
+(* Let rec by grid *)
+
 Fixpoint gen_grid_helper (dims : list Z) : list (list Z) :=
   match dims with 
   | [] => [[]]
@@ -877,17 +879,7 @@ Notation "'exists' x .. y , p" :=
 
 (* Definition gen_rec_grid (grid : list (list Z)) rec  *)
 
-Notation "'GEN_REC_GRID' [ i1 ; .. ; ik ] [ dim_lims ] A := exp " := 
-  (fun i1 => .. (fun ik => (fun A => set_Z A (cons i1 .. (cons ik nil) ..) exp)) ..)
-  (at level 30, i1 closed binder, ik closed binder).
-  
 From Coq Require Import Numbers.NaryFunctions.
-
-
-Compute (
-  let v := GEN_REC_GRID [i ; j] [1%Z] C := 4%Z in
-  ((v 2%Z 3%Z) [])
-).
 
 Compute (
   nprod_of_list _ [1; 2; 3]
@@ -931,12 +923,98 @@ Definition compute_grid_helper `{TensorElem X} (grid : list (list Z)) (n : nat) 
       grid
       starting_arr.
 
+Definition compute_grid `{TensorElem X} (dims : (list Z)) (n : nat) (rec : Z^^n --> (X -> X)) :=
+  compute_grid_helper (gen_grid_helper dims) n rec null.
+
+Notation "'GEN_REC_GRID' [ i1 ; .. ; ik ] [ dim_lims ] A := exp " := 
+  (fun i1 => .. (fun ik => (fun A => set_Z A (cons i1 .. (cons ik nil) ..) exp)) ..)
+  (at level 30, i1 closed binder, ik closed binder).
+  
+Compute (
+    let v := GEN_REC_GRID [i ; j] [1%Z] C := 4%Z in
+    ((v 2%Z 3%Z) [])
+  ).
+
+Compute (compute_grid ([10%Z]) 1 (fun i fib => set_Z fib [i] (fib _[i-1] + 2)%Z)).
+
 Compute (compute_grid_helper (gen_grid_helper [10%Z]) 1 (fun i fib => set_Z fib [i] (fib _[i-1] + 2)%Z)) [].
 
 Compute (let v := fun x => (fst x + fst (snd x)) in  ncurry _ _ 2 v 4 5).
 
 Compute (nprod_of_list _ [1; 4; 5]).
 
+Example decoupled_1D_good :
+  let rec := (fun i arr => set_Z arr [i] (arr _[i-1] + 2)%Z) in
+  compute_grid [10%Z] 1 rec = gen_rec 10%Z rec null.
+Proof.
+  simpl. unfold compute_grid. unfold compute_grid_helper. unfold gen_rec. simpl.
+  reflexivity.
+Qed.
+
+Lemma nuncurry_list `{TensorElem X} :
+  forall (rec : Z -> (X -> X)) (coord : list Z) (arr : X),
+    length coord = 1 ->
+    nuncurry Z (X -> X) 1 rec (Z_nprod_of_list 1 coord) arr = rec (hd 0%Z coord) arr.
+Proof.
+  intros rec coord arr H_len.
+  unfold nuncurry.
+  assert (H_coord : Z_nprod_of_list 1 coord = (hd 0%Z coord, tt)). {
+    unfold Z_nprod_of_list.
+    destruct coord.
+    - discriminate H_len.
+    - reflexivity.
+  }
+  rewrite H_coord. reflexivity.
+Qed.
+
+Lemma fold_left_same_fn : 
+  forall (A B : Type) (f1 f2: A -> B -> A) (elems : list B) (a0 : A),
+    (forall (a : A) (b : B), f1 a b = f2 a b) ->
+    fold_left f1 elems a0 = fold_left f2 elems a0.
+Proof.
+  intros. generalize dependent a0.
+  induction elems as [|e0 elems' IHe].
+  - auto.
+  - intros a. simpl. rewrite H. rewrite IHe. reflexivity.
+Qed.
+
+Lemma flat_map_compose :
+  forall (A B : Type) (f : A -> B -> A) (l1 l2 : list B) (a0 : A),
+  fold_left f (l1 ++ l2) a0 = fold_left f l2 (fold_left f l1 a0).
+Proof.
+  intros. generalize dependent a0. induction l1 as [|a1 l1' Il1].
+  - trivial.
+  - intros. simpl. apply Il1. 
+Qed.
+
+Lemma flat_map_fold :
+  forall (A B C : Type) (f1 : A -> B -> A) (f2 : C -> list B) (elems : list C) (a0 : A), 
+  fold_left f1 (flat_map f2 elems) a0 = fold_left (fun a b => fold_left f1 (f2 b) a) elems a0.
+Proof.
+  intros. generalize dependent a0. induction elems as [|e0 elems' IHe].
+  - trivial.
+  - intros. simpl. rewrite flat_map_compose. apply IHe.
+Qed.
+
+Lemma decoupled_1D_same_behavior `{TensorElem X} :
+  forall (rec : Z -> (X -> X)) (bound : Z),
+    compute_grid [bound] 1 rec = gen_rec bound rec null.
+Proof.
+  intros rec bound.
+  unfold compute_grid.
+  unfold compute_grid_helper.
+  unfold gen_rec.
+  replace
+    (
+      fold_left (fun arr coord => nuncurry Z (X -> X) 1 rec (Z_nprod_of_list 1 coord) arr)
+      (gen_grid_helper [bound]) null
+    ) with
+    (
+      fold_left (fun arr coord => rec (hd 0%Z coord) arr)
+      (gen_grid_helper [bound]) null
+    ).
+  - simpl. rewrite flat_map_fold. simpl. auto.  
+  - apply fold_left_same_fn. intros. symmetry. apply nuncurry_list. Admitted.
 
 (* 
   (gen_rec n (fun i => e))
