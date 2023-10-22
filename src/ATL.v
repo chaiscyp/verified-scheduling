@@ -885,17 +885,6 @@ Compute (
   nprod_of_list _ [1; 2; 3]
 ).
 
-Fixpoint nuncurry' (A B:Type) n : (A^^n-->B) -> (A^n -> B) :=
-  match n return (A^^n-->B) -> (A^n -> B) with
-  | O => fun x _ => x
-  | S n => fun f p => let (x,p) := p in nuncurry' _ _ n (f x) p
-  end.
-Fixpoint nfun_to_nfun (A B C:Type)(f:B -> C) n :
-  (A^^n-->B) -> (A^^n-->C) :=
-  match n return (A^^n-->B) -> (A^^n-->C) with
-  | O => f
-  | S n => fun g a => nfun_to_nfun _ _ _ f n (g a)
-  end.
 
 (* Fixpoint uncurry_apply `{TensorElem X} (n : nat) (rec : Z^^n --> (X -> X)) (coord : list Z) : X -> X :=
   match n return X -> X with
@@ -967,24 +956,29 @@ Proof.
   rewrite H_coord. reflexivity.
 Qed.
 
-Lemma fold_left_same_fn : 
-  forall (A B : Type) (f1 f2: A -> B -> A) (elems : list B) (a0 : A),
-    (forall (a : A) (b : B), f1 a b = f2 a b) ->
+Fixpoint true_for_all {A} (f : A -> bool) (elems : list A) : bool :=
+  match elems with 
+  | [] => true
+  | h :: t => 
+    if f h then true_for_all f t
+    else false
+  end.
+   
+Lemma fold_left_same_fn_w_conditions : 
+  forall (A B : Type) (f1 f2: A -> B -> A) (elems : list B) (a0 : A) (prop : B -> bool),
+    true_for_all prop elems = true ->
+    (forall (a : A) (b : B), prop b = true -> f1 a b = f2 a b) ->
     fold_left f1 elems a0 = fold_left f2 elems a0.
 Proof.
   intros. generalize dependent a0.
   induction elems as [|e0 elems' IHe].
   - auto.
-  - intros a. simpl. rewrite H. rewrite IHe. reflexivity.
-Qed.
-
-Lemma flat_map_compose :
-  forall (A B : Type) (f : A -> B -> A) (l1 l2 : list B) (a0 : A),
-  fold_left f (l1 ++ l2) a0 = fold_left f l2 (fold_left f l1 a0).
-Proof.
-  intros. generalize dependent a0. induction l1 as [|a1 l1' Il1].
-  - trivial.
-  - intros. simpl. apply Il1. 
+  - intros a0. simpl. destruct (prop e0) eqn: E. {
+    simpl in H. rewrite E in H. apply H0 with (a := a0) in E.
+    rewrite E. apply IHe. apply H.
+  } {
+    simpl in H. rewrite E in H. discriminate H.
+  } 
 Qed.
 
 Lemma flat_map_fold :
@@ -993,7 +987,36 @@ Lemma flat_map_fold :
 Proof.
   intros. generalize dependent a0. induction elems as [|e0 elems' IHe].
   - trivial.
-  - intros. simpl. rewrite flat_map_compose. apply IHe.
+  - intros. simpl. rewrite fold_left_app. apply IHe.
+Qed.
+
+Compute (gen_range_helper 0 6 (fun i => i)).
+
+Lemma flat_map_singleton : 
+  forall (A : Type) (l : list A),
+    true_for_all 
+      (fun x => length x =? 1)
+      (flat_map (fun x => [[x]]) l)
+    = true.
+Proof.
+  intros.
+  induction l as [|l0 l' IHl'].
+  - auto.
+  - simpl. apply IHl'.
+Qed.
+
+Lemma gen_grid_one_length :
+  forall (bound : Z),
+  true_for_all 
+    (fun x : list Z => length x =? 1) 
+    (gen_grid_helper [bound]) 
+  (*allb *)
+  = true.
+Proof.
+  intros.
+  unfold gen_grid_helper.
+  simpl.
+  apply flat_map_singleton.
 Qed.
 
 Lemma decoupled_1D_same_behavior `{TensorElem X} :
@@ -1004,6 +1027,8 @@ Proof.
   unfold compute_grid.
   unfold compute_grid_helper.
   unfold gen_rec.
+  (* setoid_rewrite flat_map_fold. *)
+  (* setoid_rewrite nuncurry_list. *)
   replace
     (
       fold_left (fun arr coord => nuncurry Z (X -> X) 1 rec (Z_nprod_of_list 1 coord) arr)
@@ -1014,7 +1039,38 @@ Proof.
       (gen_grid_helper [bound]) null
     ).
   - simpl. rewrite flat_map_fold. simpl. auto.  
-  - apply fold_left_same_fn. intros. symmetry. apply nuncurry_list. Admitted.
+  - apply fold_left_same_fn_w_conditions with (prop := fun x => eqb (length x) 1).
+    + apply gen_grid_one_length.  
+    + intros. symmetry. apply nuncurry_list. apply beq_nat_true in H0. apply H0.
+Qed.
+
+Fixpoint nuncurry (A B:Type) n : (A^^n-->B) -> (A^n -> B) :=
+  match n return (A^^n-->B) -> (A^n -> B) with
+  | O => fun x _ => x
+  | S n => fun f p => let (x,p) := p in nuncurry _ _ n (f x) p
+  end.
+
+Inductive NaryFunc : nat -> Set :=
+| 
+
+Definition testei `{TensorElem X} n (fn : Z^^n --> (X -> X)) :=
+  match n with 
+  | O => fn
+  | S n' => 
+    match fn in (Z^^(S n') --> (X -> X)) with
+    | _ => fn 0%Z
+    end
+  end.
+
+Fixpoint gen_rec_wrapper `{TensorElem X} (n : nat) (dims : list Z) (fn : Z^^n --> (X -> X)) :=
+  match n return Z^^
+
+Example decoupled_2d_good :
+  let rec := (fun i arr => set_Z arr [i] (arr _[i-1] + 2)%Z) in
+  compute_grid [10%Z] 1 rec = gen_rec 10%Z rec null.
+
+Lemma decoupled_nd_same_behavior `{TensorElem X}:
+  forall (rec)
 
 (* 
   (gen_rec n (fun i => e))
