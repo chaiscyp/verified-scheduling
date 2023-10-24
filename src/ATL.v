@@ -912,7 +912,7 @@ Definition compute_grid_helper `{TensorElem X} (grid : list (list Z)) (n : nat) 
       grid
       starting_arr.
 
-Definition compute_grid `{TensorElem X} (dims : (list Z)) (n : nat) (rec : Z^^n --> (X -> X)) :=
+Definition compute_grid `{TensorElem X} (n : nat) (dims : (list Z)) (rec : Z^^n --> (X -> X)) :=
   compute_grid_helper (gen_grid_helper dims) n rec null.
 
 Notation "'GEN_REC_GRID' [ i1 ; .. ; ik ] [ dim_lims ] A := exp " := 
@@ -924,7 +924,7 @@ Compute (
     ((v 2%Z 3%Z) [])
   ).
 
-Compute (compute_grid ([10%Z]) 1 (fun i fib => set_Z fib [i] (fib _[i-1] + 2)%Z)).
+Compute (compute_grid 1 ([10%Z]) (fun i fib => set_Z fib [i] (fib _[i-1] + 2)%Z)).
 
 Compute (compute_grid_helper (gen_grid_helper [10%Z]) 1 (fun i fib => set_Z fib [i] (fib _[i-1] + 2)%Z)) [].
 
@@ -934,7 +934,7 @@ Compute (nprod_of_list _ [1; 4; 5]).
 
 Example decoupled_1D_good :
   let rec := (fun i arr => set_Z arr [i] (arr _[i-1] + 2)%Z) in
-  compute_grid [10%Z] 1 rec = gen_rec 10%Z rec null.
+  compute_grid 1 [10%Z] rec = gen_rec 10%Z rec null.
 Proof.
   simpl. unfold compute_grid. unfold compute_grid_helper. unfold gen_rec. simpl.
   reflexivity.
@@ -1021,7 +1021,7 @@ Qed.
 
 Lemma decoupled_1D_same_behavior `{TensorElem X} :
   forall (rec : Z -> (X -> X)) (bound : Z),
-    compute_grid [bound] 1 rec = gen_rec bound rec null.
+    compute_grid 1 [bound] rec = gen_rec bound rec null.
 Proof.
   intros rec bound.
   unfold compute_grid.
@@ -1050,24 +1050,41 @@ Fixpoint nuncurry (A B:Type) n : (A^^n-->B) -> (A^n -> B) :=
   | S n => fun f p => let (x,p) := p in nuncurry _ _ n (f x) p
   end.
 
-Inductive NaryFunc : nat -> Set :=
-| 
-
-Definition testei `{TensorElem X} n (fn : Z^^n --> (X -> X)) :=
-  match n with 
-  | O => fn
-  | S n' => 
-    match fn in (Z^^(S n') --> (X -> X)) with
-    | _ => fn 0%Z
-    end
+Fixpoint gen_rec_wrapper `{TensorElem X} (n : nat) (dims : list Z) (fn : Z^^n --> (X -> X)) :=
+  match n, fn with 
+  | O, fn => fn
+  | S n', fn => gen_rec (hd 0%Z dims) (fun i => gen_rec_wrapper n' (tl dims) (fn i))
   end.
 
-Fixpoint gen_rec_wrapper `{TensorElem X} (n : nat) (dims : list Z) (fn : Z^^n --> (X -> X)) :=
-  match n return Z^^
+Definition gen_rec_full `{TensorElem X} (n : nat) (dims : list Z) (fn : Z^^n --> (X -> X)) :=
+  gen_rec_wrapper n dims fn null.
 
-Example decoupled_2d_good :
-  let rec := (fun i arr => set_Z arr [i] (arr _[i-1] + 2)%Z) in
-  compute_grid [10%Z] 1 rec = gen_rec 10%Z rec null.
+Example decoupled_2d_good:
+  let rec := (fun i j C => set_Z C [i; j] (C _[i; j-1] + i)%Z) in
+  compute_grid 2 [4%Z; 4%Z] rec = gen_rec_full 2 [4%Z; 4%Z] rec.
+Proof. 
+  simpl. unfold compute_grid. unfold gen_rec_full.
+  unfold gen_rec_wrapper. unfold gen_rec. simpl.
+  reflexivity.
+Qed.
+
+Example decoupled_binom_good:
+  let rec := fun i j C => 
+    set_Z C [i; j] 
+      (
+        |{i >=? j}| (
+          |{orb (j =? 0) (i =? j)}| 1 + 
+          |{andb (negb (j =? 0)) (j <? i)}| (C _[i-1; j] + C _[i-1; j-1])
+        )
+      )%Z in
+  compute_grid 2 [4%Z; 4%Z] rec = gen_rec_full 2 [4%Z; 4%Z] rec.
+Proof. 
+simpl. unfold compute_grid. unfold gen_rec_full.
+unfold gen_rec_wrapper. unfold gen_rec. simpl.
+reflexivity.
+Qed.
+
+Example decoupled_
 
 Lemma decoupled_nd_same_behavior `{TensorElem X}:
   forall (rec)
