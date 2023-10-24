@@ -1079,15 +1079,24 @@ Example decoupled_binom_good:
       )%Z in
   compute_grid 2 [4%Z; 4%Z] rec = gen_rec_full 2 [4%Z; 4%Z] rec.
 Proof. 
-simpl. unfold compute_grid. unfold gen_rec_full.
-unfold gen_rec_wrapper. unfold gen_rec. simpl.
-reflexivity.
+  simpl. unfold compute_grid. unfold gen_rec_full.
+  unfold gen_rec_wrapper. unfold gen_rec. simpl.
+  reflexivity.
 Qed.
 
-Example decoupled_
+Example decoupled_3D_good:
+  let rec := (fun i j k C => set_Z C [i; j; k] (C _[i; j; k-1] + i + j + k)%Z) in
+  compute_grid 3 [2%Z; 2%Z; 2%Z] rec = gen_rec_full 3 [2%Z; 2%Z; 2%Z] rec.
+Proof.
+  simpl. unfold compute_grid. unfold gen_rec_full.
+  unfold gen_rec_wrapper. unfold gen_rec. simpl.
+  reflexivity.
+Qed.
 
 Lemma decoupled_nd_same_behavior `{TensorElem X}:
-  forall (rec)
+  forall (n: nat) (dims: list Z) (rec: Z^^n --> (X -> X)),
+    compute_grid n dims rec = gen_rec_full n dims rec.
+Proof.
 
 (* 
   (gen_rec n (fun i => e))
