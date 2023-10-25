@@ -902,7 +902,7 @@ Fixpoint Z_nprod_of_list (n : nat) (l : list Z) : Z^n :=
     end
   end.
 
-Definition compute_grid_helper `{TensorElem X} (grid : list (list Z)) (n : nat) (rec : Z^^n --> (X -> X)) := 
+Definition compute_grid_helper `{TensorElem X} (n : nat) (grid : list (list Z)) (rec : Z^^n --> (X -> X)) := 
   fun starting_arr =>
     fold_left 
       (
@@ -913,7 +913,7 @@ Definition compute_grid_helper `{TensorElem X} (grid : list (list Z)) (n : nat) 
       starting_arr.
 
 Definition compute_grid `{TensorElem X} (n : nat) (dims : (list Z)) (rec : Z^^n --> (X -> X)) :=
-  compute_grid_helper (gen_grid_helper dims) n rec null.
+  compute_grid_helper n (gen_grid_helper dims) rec null.
 
 Notation "'GEN_REC_GRID' [ i1 ; .. ; ik ] [ dim_lims ] A := exp " := 
   (fun i1 => .. (fun ik => (fun A => set_Z A (cons i1 .. (cons ik nil) ..) exp)) ..)
@@ -926,7 +926,7 @@ Compute (
 
 Compute (compute_grid 1 ([10%Z]) (fun i fib => set_Z fib [i] (fib _[i-1] + 2)%Z)).
 
-Compute (compute_grid_helper (gen_grid_helper [10%Z]) 1 (fun i fib => set_Z fib [i] (fib _[i-1] + 2)%Z)) [].
+Compute (compute_grid_helper 1 (gen_grid_helper [10%Z]) (fun i fib => set_Z fib [i] (fib _[i-1] + 2)%Z)) [].
 
 Compute (let v := fun x => (fst x + fst (snd x)) in  ncurry _ _ 2 v 4 5).
 
@@ -963,7 +963,7 @@ Fixpoint true_for_all {A} (f : A -> bool) (elems : list A) : bool :=
     if f h then true_for_all f t
     else false
   end.
-   
+
 Lemma fold_left_same_fn_w_conditions : 
   forall (A B : Type) (f1 f2: A -> B -> A) (elems : list B) (a0 : A) (prop : B -> bool),
     true_for_all prop elems = true ->
@@ -979,6 +979,19 @@ Proof.
   } {
     simpl in H. rewrite E in H. discriminate H.
   } 
+Qed.
+
+Lemma fold_left_same_fn :
+  forall (A B : Type) (f1 f2: A -> B -> A) (elems : list B) (a0 : A),
+  (forall (a : A) (b : B), f1 a b = f2 a b) ->
+  fold_left f1 elems a0 = fold_left f2 elems a0.
+Proof.
+  intros.
+  apply fold_left_same_fn_w_conditions with (prop := fun x => true).
+  - induction elems as [|e0 elems' Ie].
+    + auto.
+    + simpl. apply Ie.
+  - intros. apply H.
 Qed.
 
 Lemma flat_map_fold :
@@ -1044,12 +1057,6 @@ Proof.
     + intros. symmetry. apply nuncurry_list. apply beq_nat_true in H0. apply H0.
 Qed.
 
-Fixpoint nuncurry (A B:Type) n : (A^^n-->B) -> (A^n -> B) :=
-  match n return (A^^n-->B) -> (A^n -> B) with
-  | O => fun x _ => x
-  | S n => fun f p => let (x,p) := p in nuncurry _ _ n (f x) p
-  end.
-
 Fixpoint gen_rec_wrapper `{TensorElem X} (n : nat) (dims : list Z) (fn : Z^^n --> (X -> X)) :=
   match n, fn with 
   | O, fn => fn
@@ -1093,10 +1100,46 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma decoupled_nd_helper `{TensorElem X}:
+  forall (n: nat) (dims: list Z) (rec: Z^^n --> (X -> X)) (arr: X),
+  n = length dims ->
+  gen_rec_wrapper n dims rec arr = 
+  compute_grid_helper n (gen_grid_helper dims) rec arr.
+Proof.
+  intros n. induction n as [|n' IHn'].
+  - intros. assert (dims = []) as Hdims_null. {
+    destruct dims.
+    - trivial.
+    - discriminate H0.
+  } rewrite Hdims_null. simpl. reflexivity.
+  - intros. simpl. unfold gen_rec.
+    replace (
+      fold_left 
+      (fun arr0 ind => gen_rec_wrapper n' (tl dims) (rec ind) arr0) 
+      (gen_range 0 (hd 0%Z dims)) arr
+    ) with (
+      fold_left 
+      (fun arr0 ind => compute_grid_helper n' (gen_grid_helper (tl dims)) (rec ind) arr0) 
+      (gen_range 0 (hd 0%Z dims)) arr
+    ). 
+    {
+      
+    }
+    {
+      apply fold_left_same_fn. intros. symmetry. apply IHn'. destruct dims.
+      - discriminate H0.
+      - simpl in H0. inversion H0. simpl. reflexivity.
+    }
+
 Lemma decoupled_nd_same_behavior `{TensorElem X}:
   forall (n: nat) (dims: list Z) (rec: Z^^n --> (X -> X)),
-    compute_grid n dims rec = gen_rec_full n dims rec.
+    gen_rec_full n dims rec = compute_grid n dims rec.
 Proof.
+  intros n dims rec.
+  unfold compute_grid.
+  unfold gen_rec_full.
+  unfold compute_grid_helper.
+  unfold gen_rec_wrapper.
 
 (* 
   (gen_rec n (fun i => e))
