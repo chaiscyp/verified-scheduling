@@ -1183,6 +1183,28 @@ Proof.
   apply decoupled_nd_helper.
 Qed.
 
+Compute (
+  let rec := fun i j C => 
+    set_Z C [i; j] 
+      (
+        |{i >=? j}| (
+          |{orb (j =? 0) (i =? j)}| 1 + 
+          |{andb (negb (j =? 0)) (j <? i)}| (C _[i-1; j] + C _[i-1; j-1])
+        )
+      )%Z in
+  gen_rec_full 2 [4%Z; 4%Z] rec).
+
+Compute (
+let rec := fun i C => 
+  set_Z C [i] 
+    (
+      i + 13
+    )%Z in
+compute_grid 1 [10%Z] rec).
+
+Example no_self_recurrence:
+  let rec := (fun i j C => set_Z C [i; j] (i + j)%Z) in
+  compute_grid 2 [4%Z; 4%Z] rec = gen_rec_full 2 [4%Z; 4%Z] rec. 
 
 (* 
   (gen_rec n (fun i => e))
