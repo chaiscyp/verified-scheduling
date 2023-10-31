@@ -1003,6 +1003,15 @@ Proof.
   - intros. simpl. rewrite fold_left_app. apply IHe.
 Qed.
 
+Lemma map_in_fold_left :
+  forall (A B C : Type) (f1 : A -> B -> A) (f2 : C -> B) (elems : list C) (a0 : A),
+  fold_left f1 (map f2 elems) a0 = fold_left (fun a b => f1 a (f2 b)) elems a0.
+Proof.
+  intros. generalize dependent a0. induction elems as [|e0 elems' IHe].
+  - intros. auto.
+  - intros. simpl. apply IHe.
+Qed. 
+
 Compute (gen_range_helper 0 6 (fun i => i)).
 
 Lemma flat_map_singleton : 
@@ -1100,6 +1109,35 @@ Proof.
   reflexivity.
 Qed.
 
+Lemma fold_left_gen_grid_destruct `{TensorElem X}:
+  forall (n: nat) (d0: Z) (d': list Z) (arr : X) (rec: Z^^(S n) --> (X -> X)),
+  n = length d' -> 
+  fold_left
+    (
+      fun arr0 coord =>
+        nuncurry _ _ (S n) rec (Z_nprod_of_list (S n) coord) arr0
+    )
+    (gen_grid_helper (d0 :: d'))
+    arr =
+  fold_left 
+    (
+      fun arr ind =>
+        fold_left 
+          (
+            fun arr' coord =>
+              nuncurry _ _ n (rec ind) (Z_nprod_of_list n coord) arr'
+          )
+          (gen_grid_helper d')
+          arr
+    )
+    (gen_range 0 d0)
+    arr.
+Proof.
+  intros. unfold gen_grid_helper. rewrite flat_map_fold.
+  fold (gen_grid_helper d'). apply fold_left_same_fn.
+  intros. apply map_in_fold_left.
+Qed.
+
 Lemma decoupled_nd_helper `{TensorElem X}:
   forall (n: nat) (dims: list Z) (rec: Z^^n --> (X -> X)) (arr: X),
   n = length dims ->
@@ -1112,7 +1150,7 @@ Proof.
     - trivial.
     - discriminate H0.
   } rewrite Hdims_null. simpl. reflexivity.
-  - intros. simpl. unfold gen_rec.
+  - intros. simpl. unfold gen_rec. 
     replace (
       fold_left 
       (fun arr0 ind => gen_rec_wrapper n' (tl dims) (rec ind) arr0) 
@@ -1121,15 +1159,18 @@ Proof.
       fold_left 
       (fun arr0 ind => compute_grid_helper n' (gen_grid_helper (tl dims)) (rec ind) arr0) 
       (gen_range 0 (hd 0%Z dims)) arr
-    ). 
-    {
-      
+    ).
+    destruct dims. {
+      discriminate H0.
     }
+    unfold compute_grid_helper. symmetry. apply fold_left_gen_grid_destruct.
+    auto.
     {
       apply fold_left_same_fn. intros. symmetry. apply IHn'. destruct dims.
       - discriminate H0.
       - simpl in H0. inversion H0. simpl. reflexivity.
     }
+  Qed.
 
 Lemma decoupled_nd_same_behavior `{TensorElem X}:
   forall (n: nat) (dims: list Z) (rec: Z^^n --> (X -> X)),
