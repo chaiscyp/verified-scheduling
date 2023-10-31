@@ -1174,13 +1174,15 @@ Proof.
 
 Lemma decoupled_nd_same_behavior `{TensorElem X}:
   forall (n: nat) (dims: list Z) (rec: Z^^n --> (X -> X)),
+    n = length dims ->
     gen_rec_full n dims rec = compute_grid n dims rec.
 Proof.
   intros n dims rec.
   unfold compute_grid.
   unfold gen_rec_full.
-  unfold compute_grid_helper.
-  unfold gen_rec_wrapper.
+  apply decoupled_nd_helper.
+Qed.
+
 
 (* 
   (gen_rec n (fun i => e))
