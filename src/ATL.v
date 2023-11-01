@@ -7,6 +7,7 @@ From Coq Require Import Reals.Reals. Import RIneq. Import Rdefinitions.
 From Coq Require Import ZArith.Int.
 From Coq Require Import ZArith.Znat.
 From Coq Require Import Logic.FunctionalExtensionality.
+From Coq Require Import Numbers.NaryFunctions.
 
 Import ListNotations.
 
@@ -642,37 +643,6 @@ Proof.
   }
 Defined.
 
-(* Test Cases *)
-Example test_listSet_basic :
-  list_set_R_helper [0%R; 1%R; 2%R] [1%Z] 3%R = 
-  [0%R; 3%R; 2%R].
-Proof. reflexivity. Qed.
-
-Example test_listSet_construct :
-  list_set_R_helper [0%R; 1%R] [3%Z] 123%R = 
-  [0%R; 1%R; 0%R; 123%R].
-Proof. reflexivity. Qed.
-
-Example test_listSet_2d :
-  list_set_R_helper [[0%R; 1%R; 2%R]; [3%R; 4%R; 5%R]] [1%Z; 2%Z] 123%R =
-  [[0%R; 1%R; 2%R]; [3%R; 4%R; 123%R]].
-Proof. reflexivity. Qed.
-
-Example test_listSet_Construct_2d_1 :
-  list_set_R_helper [] [1%Z; 2%Z] 345%R =
-  [[]; [0%R; 0%R; 345%R]].
-Proof. reflexivity. Qed.
-
-Example test_listSet_Construct_2d_bad :
-  list_set_R_helper [[1%R; 2%R; 3%R]] [1%Z] 345%R = 
-  [[1%R; 2%R; 3%R]; []].
-Proof. reflexivity. Qed.
-
-Example test_listSet_Construct_3d :
-  list_set_R_helper [[[0%R; 1%R; 2%R]; [3%R; 4%R; 5%R]]; [[1%R]; [2%R]]] [1%Z; 1%Z; 3%Z] 345%R = 
-  [[[0%R; 1%R; 2%R]; [3%R; 4%R; 5%R]]; [[1%R]; [2%R; 0%R; 0%R; 345%R]]].
-Proof. reflexivity. Qed.
-
 #[refine] Instance TupleTensorElem {X Y} `{TensorElem X} `{TensorElem Y} :
   TensorElem (X * Y) :=
   { null := (null,null);
@@ -755,6 +725,38 @@ Definition concat {X} `{TensorElem X} (l1 l2 : list X) : list X :=
 
 Infix "<++>" := concat (at level 34, left associativity).
 
+(* Test Cases for set_Z and set_R*)
+Example test_listSet_basic :
+  list_set_R_helper [0%R; 1%R; 2%R] [1%Z] 3%R = 
+  [0%R; 3%R; 2%R].
+Proof. reflexivity. Qed.
+
+Example test_listSet_construct :
+  list_set_R_helper [0%R; 1%R] [3%Z] 123%R = 
+  [0%R; 1%R; 0%R; 123%R].
+Proof. reflexivity. Qed.
+
+Example test_listSet_2d :
+  list_set_R_helper [[0%R; 1%R; 2%R]; [3%R; 4%R; 5%R]] [1%Z; 2%Z] 123%R =
+  [[0%R; 1%R; 2%R]; [3%R; 4%R; 123%R]].
+Proof. reflexivity. Qed.
+
+Example test_listSet_Construct_2d_1 :
+  list_set_R_helper [] [1%Z; 2%Z] 345%R =
+  [[]; [0%R; 0%R; 345%R]].
+Proof. reflexivity. Qed.
+
+Example test_listSet_Construct_2d_bad :
+  list_set_R_helper [[1%R; 2%R; 3%R]] [1%Z] 345%R = 
+  [[1%R; 2%R; 3%R]; []].
+Proof. reflexivity. Qed.
+
+Example test_listSet_Construct_3d :
+  list_set_R_helper [[[0%R; 1%R; 2%R]; [3%R; 4%R; 5%R]]; [[1%R]; [2%R]]] [1%Z; 1%Z; 3%Z] 345%R = 
+  [[[0%R; 1%R; 2%R]; [3%R; 4%R; 5%R]]; [[1%R]; [2%R; 0%R; 0%R; 345%R]]].
+Proof. reflexivity. Qed.
+
+(* gen_range and their test cases *)
 Fixpoint gen_range_helper (from : Z) (rem : nat) (fn : Z -> Z) :=
   match rem with 
   | O => []
@@ -777,13 +779,22 @@ Example test_gen_range_3 :
   gen_range 1%Z 0%Z = [].
 Proof. reflexivity. Qed.
 
-(* Let rec binding *)
-Definition gen_rec `{TensorElem X} (n : Z) (fn : Z -> (X -> X)) : X -> X :=
+(* DECOUPLED LET REC *)
+Definition gen_rec `{TensorElem X} (n : Z) (fn : Z -> (list X -> list X)) : list X -> list X :=
   fun prev_arr =>
     fold_left 
       (fun arr ind => (fn ind) arr)
       (gen_range 0 n)
       prev_arr.
+
+Fixpoint gen_rec_wrapper `{TensorElem X} (n : nat) (dims : list Z) (fn : Z^^n --> (list X -> list X)) :=
+  match n, fn with 
+  | O, fn => fn
+  | S n', fn => gen_rec (hd 0%Z dims) (fun i => gen_rec_wrapper n' (tl dims) (fn i))
+  end.
+
+Definition gen_rec_full `{TensorElem X} (n : nat) (dims : list Z) (fn : Z^^n --> (list X -> list X)) :=
+  gen_rec_wrapper n dims fn null.
 
 Notation "'GEN_REC' [ i < n ] e " := (gen_rec n (fun i => e))
                                       (at level 36,
@@ -792,13 +803,16 @@ Notation "'GEN_REC' [ i < n ] e " := (gen_rec n (fun i => e))
                                       format
                                       "'[hv ' 'GEN_REC'  [  i  <  n  ] ']' '//' e").
 
+(* Special iverson form, as scalar multiplication is basically the identity operation in Z instance
+  of TensorElem *)
 Definition iverson_Z `{TensorElem X} (b : bool) (e : X) :=
   (if b then e else null).
 
 Notation "|{ b }| e" := (iverson_Z b%Z e)
                           (at level 35,
                            format "'[hv ' |{  b  }| ']' '[hv '  e ']'").
-
+                    
+(* Decoupled let rec test cases *)
 Example test_gen_rec_1d :
   (GEN_REC [i < 5] fun a => set_Z a [i] (a _[i-1] + 2)%Z) [] = 
   [2%Z; 4%Z; 6%Z; 8%Z; 10%Z].
@@ -819,6 +833,16 @@ Example test_gen_rec_2d :
   [[0%Z; 0%Z]; [1%Z; 2%Z]; [2%Z; 4%Z]].
 Proof. reflexivity. Qed.
 
+Example test_gen_rec_2d_no_self :
+  (GEN_REC [i < 3] (GEN_REC [j < 2] fun C => set_Z C [i; j] (i + j)%Z)) [] = 
+  [[0%Z; 1%Z]; [1%Z; 2%Z]; [2%Z; 3%Z]].
+Proof. reflexivity. Qed.
+
+Example test_gen_rec_wrapper_no_self : 
+  gen_rec_full 2 [3%Z; 2%Z] (fun i j C => set_Z C [i; j] (i + j)%Z)  = 
+  [[0%Z; 1%Z]; [1%Z; 2%Z]; [2%Z; 3%Z]].
+Proof. reflexivity. Qed.
+
 Example test_gen_rec_fibo :
   (GEN_REC [i < 7] fun fib => 
     set_Z fib [i] 
@@ -829,7 +853,7 @@ Proof. unfold gen_rec. simpl. reflexivity. Qed.
 
 Example test_gen_rec_binomial :
   (
-    GEN_REC [i < 5] GEN_REC [j < 5]
+    GEN_REC [i < 5] GEN_REC [j < 4]
     fun C => 
     set_Z C [i; j] 
       (
@@ -839,15 +863,16 @@ Example test_gen_rec_binomial :
         )
       )%Z
   ) [] = 
-[[1%Z; 0%Z; 0%Z; 0%Z; 0%Z];
-[1%Z; 1%Z; 0%Z; 0%Z; 0%Z];
-[1%Z; 2%Z; 1%Z; 0%Z; 0%Z];
-[1%Z; 3%Z; 3%Z; 1%Z; 0%Z];
-[1%Z; 4%Z; 6%Z; 4%Z; 1%Z]].
-Proof. unfold gen_rec. simpl. reflexivity. Qed.
+[[1%Z; 0%Z; 0%Z; 0%Z];
+[1%Z; 1%Z; 0%Z; 0%Z];
+[1%Z; 2%Z; 1%Z; 0%Z];
+[1%Z; 3%Z; 3%Z; 1%Z];
+[1%Z; 4%Z; 6%Z; 4%Z]].
+Proof. simpl. reflexivity. Qed.
 
-(* Let rec by grid *)
+(* GRID VERSION OF LET REC *)
 
+(* Generates grid coordinates specified by dimensions *)
 Fixpoint gen_grid_helper (dims : list Z) : list (list Z) :=
   match dims with 
   | [] => [[]]
@@ -865,33 +890,7 @@ Example test_gen_grid_helper_1 :
   [2%Z; 0%Z]; [2%Z; 1%Z]; [2%Z; 2%Z]; [2%Z; 3%Z]].
 Proof. reflexivity. Qed.
 
-Notation "x _[ i ; .. ; j ]" :=
-  (get .. (get x i%Z) .. j%Z) (at level 33).
-
-Notation "'exists' x .. y , p" :=
-  (ex (fun x => .. (ex (fun y => p)) ..))
-  (at level 200, x binder, y binder, right associativity).
-
-(* Notation "'testee' [ a .. z ] e" := (fun a => .. (fun z => e) ..) 
-  (at level 33, a binder, z binder, right associativity). *)
-
-(* Compute ((testee [i j k] (i+j+k)) 1 4 6). *)
-
-(* Definition gen_rec_grid (grid : list (list Z)) rec  *)
-
-From Coq Require Import Numbers.NaryFunctions.
-
-Compute (
-  nprod_of_list _ [1; 2; 3]
-).
-
-
-(* Fixpoint uncurry_apply `{TensorElem X} (n : nat) (rec : Z^^n --> (X -> X)) (coord : list Z) : X -> X :=
-  match n return X -> X with
-  | O => fun x => x
-  | S n' => let '(h::t) := coord in uncurry_apply n' (rec h) coord
-  end.  *)
-
+(* Converts list to n-ary products *)
 Fixpoint Z_nprod_of_list (n : nat) (l : list Z) : Z^n :=
   match n return Z^n with
   | O => tt
@@ -902,7 +901,8 @@ Fixpoint Z_nprod_of_list (n : nat) (l : list Z) : Z^n :=
     end
   end.
 
-Definition compute_grid_helper `{TensorElem X} (n : nat) (grid : list (list Z)) (rec : Z^^n --> (X -> X)) := 
+(* Helper function for the grid version of let_rec *)
+Definition compute_grid_helper `{TensorElem X} (n : nat) (grid : list (list Z)) (rec : Z^^n --> (list X -> list X)) := 
   fun starting_arr =>
     fold_left 
       (
@@ -912,33 +912,86 @@ Definition compute_grid_helper `{TensorElem X} (n : nat) (grid : list (list Z)) 
       grid
       starting_arr.
 
-Definition compute_grid `{TensorElem X} (n : nat) (dims : (list Z)) (rec : Z^^n --> (X -> X)) :=
+(* Grid version of let rec *)
+Definition compute_grid `{TensorElem X} (n : nat) (dims : (list Z)) (rec : Z^^n --> (list X -> list X)) :=
   compute_grid_helper n (gen_grid_helper dims) rec null.
 
 Notation "'GEN_REC_GRID' [ i1 ; .. ; ik ] [ dim_lims ] A := exp " := 
   (fun i1 => .. (fun ik => (fun A => set_Z A (cons i1 .. (cons ik nil) ..) exp)) ..)
   (at level 30, i1 closed binder, ik closed binder).
   
-Compute (
-    let v := GEN_REC_GRID [i ; j] [1%Z] C := 4%Z in
-    ((v 2%Z 3%Z) [])
-  ).
+(* Grid Version Test cases *)
 
-Compute (compute_grid 1 ([10%Z]) (fun i fib => set_Z fib [i] (fib _[i-1] + 2)%Z)).
+Example test_compute_grid_constant :
+  let rec := fun i C => set_Z C [i] 4%Z in 
+  compute_grid 1 [7%Z] rec = [4%Z; 4%Z; 4%Z; 4%Z; 4%Z; 4%Z; 4%Z].
+Proof. simpl. reflexivity. Qed.
 
-Compute (compute_grid_helper 1 (gen_grid_helper [10%Z]) (fun i fib => set_Z fib [i] (fib _[i-1] + 2)%Z)) [].
+Example test_compute_grid_1d :
+  let rec := fun i C => 
+    set_Z C [i] (C _[i-1] + 2)%Z in
+  compute_grid 1 [5%Z] rec = 
+  [2%Z; 4%Z; 6%Z; 8%Z; 10%Z].
+Proof. simpl. reflexivity. Qed.
 
-Compute (let v := fun x => (fst x + fst (snd x)) in  ncurry _ _ 2 v 4 5).
+Example test_compute_grid_sum :
+  let rec := fun i C => 
+    set_Z C [i] (C _[i-1] + 1 + i)%Z in
+  compute_grid 1 [5%Z] rec = 
+  [1%Z; 3%Z; 6%Z; 10%Z; 15%Z].
+Proof. simpl. reflexivity. Qed.
 
-Compute (nprod_of_list _ [1; 4; 5]).
+Example test_compute_grid_1d_more : 
+  let rec := fun i C => 
+    set_Z C [i] (C _[i-1])%Z in
+  compute_grid 1 [5%Z] rec = 
+  [0%Z; 0%Z; 0%Z; 0%Z; 0%Z].
+Proof. simpl. reflexivity. Qed.
 
-Example decoupled_1D_good :
+Example test_compute_grid_2d :
+  let rec := fun i j C => 
+    set_Z C [i; j] (C _[i; j-1] + i)%Z in
+  compute_grid 2 [3%Z; 2%Z] rec = 
+  [[0%Z; 0%Z]; [1%Z; 2%Z]; [2%Z; 4%Z]].
+Proof. simpl. reflexivity. Qed.
+
+Example test_compute_grid_fibo :
+  let rec := fun i fib => 
+    set_Z fib [i] 
+    (|{i >? 1}| (fib _[i-1] + fib _[i-2]) + |{i <=? 1}| 1)%Z in
+  compute_grid 1 [7%Z] rec =
+  [1%Z; 1%Z; 2%Z; 3%Z; 5%Z; 8%Z; 13%Z].
+Proof. simpl. reflexivity. Qed.
+
+Example test_compute_grid_binomial :
+  let rec := fun i j C =>
+    set_Z C [i; j] 
+      (
+        |{i >=? j}| (
+          |{orb (j =? 0) (i =? j)}| 1 + 
+          |{andb (negb (j =? 0)) (j <? i)}| (C _[i-1; j] + C _[i-1; j-1])
+        )
+      )%Z in
+  compute_grid 2 [5%Z; 4%Z] rec = 
+  [[1%Z; 0%Z; 0%Z; 0%Z];
+  [1%Z; 1%Z; 0%Z; 0%Z];
+  [1%Z; 2%Z; 1%Z; 0%Z];
+  [1%Z; 3%Z; 3%Z; 1%Z];
+  [1%Z; 4%Z; 6%Z; 4%Z]].
+Proof. simpl. reflexivity. Qed.
+
+(* EQUIVALENCE PROOF *)
+
+(* Examples *)
+Example equivalence_1D_test :
   let rec := (fun i arr => set_Z arr [i] (arr _[i-1] + 2)%Z) in
   compute_grid 1 [10%Z] rec = gen_rec 10%Z rec null.
 Proof.
   simpl. unfold compute_grid. unfold compute_grid_helper. unfold gen_rec. simpl.
   reflexivity.
 Qed.
+
+(* Auxiliary Lemmas *)
 
 Lemma nuncurry_list `{TensorElem X} :
   forall (rec : Z -> (X -> X)) (coord : list Z) (arr : X),
@@ -994,7 +1047,7 @@ Proof.
   - intros. apply H.
 Qed.
 
-Lemma flat_map_fold :
+Lemma flat_map_fold_left :
   forall (A B C : Type) (f1 : A -> B -> A) (f2 : C -> list B) (elems : list C) (a0 : A), 
   fold_left f1 (flat_map f2 elems) a0 = fold_left (fun a b => fold_left f1 (f2 b) a) elems a0.
 Proof.
@@ -1003,7 +1056,7 @@ Proof.
   - intros. simpl. rewrite fold_left_app. apply IHe.
 Qed.
 
-Lemma map_in_fold_left :
+Lemma map_fold_left :
   forall (A B C : Type) (f1 : A -> B -> A) (f2 : C -> B) (elems : list C) (a0 : A),
   fold_left f1 (map f2 elems) a0 = fold_left (fun a b => f1 a (f2 b)) elems a0.
 Proof.
@@ -1011,8 +1064,6 @@ Proof.
   - intros. auto.
   - intros. simpl. apply IHe.
 Qed. 
-
-Compute (gen_range_helper 0 6 (fun i => i)).
 
 Lemma flat_map_singleton : 
   forall (A : Type) (l : list A),
@@ -1041,8 +1092,9 @@ Proof.
   apply flat_map_singleton.
 Qed.
 
-Lemma decoupled_1D_same_behavior `{TensorElem X} :
-  forall (rec : Z -> (X -> X)) (bound : Z),
+(* 1D Equivalence Lemma *)
+Lemma equivalence_1D `{TensorElem X} :
+  forall (rec : Z -> (list X -> list X)) (bound : Z),
     compute_grid 1 [bound] rec = gen_rec bound rec null.
 Proof.
   intros rec bound.
@@ -1053,38 +1105,29 @@ Proof.
   (* setoid_rewrite nuncurry_list. *)
   replace
     (
-      fold_left (fun arr coord => nuncurry Z (X -> X) 1 rec (Z_nprod_of_list 1 coord) arr)
+      fold_left (fun arr coord => nuncurry _ _ 1 rec (Z_nprod_of_list 1 coord) arr)
       (gen_grid_helper [bound]) null
     ) with
     (
       fold_left (fun arr coord => rec (hd 0%Z coord) arr)
       (gen_grid_helper [bound]) null
     ).
-  - simpl. rewrite flat_map_fold. simpl. auto.  
+  - simpl. rewrite flat_map_fold_left. simpl. auto.  
   - apply fold_left_same_fn_w_conditions with (prop := fun x => eqb (length x) 1).
     + apply gen_grid_one_length.  
     + intros. symmetry. apply nuncurry_list. apply beq_nat_true in H0. apply H0.
 Qed.
 
-Fixpoint gen_rec_wrapper `{TensorElem X} (n : nat) (dims : list Z) (fn : Z^^n --> (X -> X)) :=
-  match n, fn with 
-  | O, fn => fn
-  | S n', fn => gen_rec (hd 0%Z dims) (fun i => gen_rec_wrapper n' (tl dims) (fn i))
-  end.
+(* nD equivalence examples*)
 
-Definition gen_rec_full `{TensorElem X} (n : nat) (dims : list Z) (fn : Z^^n --> (X -> X)) :=
-  gen_rec_wrapper n dims fn null.
-
-Example decoupled_2d_good:
+Example equivalence_2d:
   let rec := (fun i j C => set_Z C [i; j] (C _[i; j-1] + i)%Z) in
   compute_grid 2 [4%Z; 4%Z] rec = gen_rec_full 2 [4%Z; 4%Z] rec.
 Proof. 
-  simpl. unfold compute_grid. unfold gen_rec_full.
-  unfold gen_rec_wrapper. unfold gen_rec. simpl.
-  reflexivity.
+  simpl. auto.
 Qed.
 
-Example decoupled_binom_good:
+Example equivalence_binom:
   let rec := fun i j C => 
     set_Z C [i; j] 
       (
@@ -1095,12 +1138,12 @@ Example decoupled_binom_good:
       )%Z in
   compute_grid 2 [4%Z; 4%Z] rec = gen_rec_full 2 [4%Z; 4%Z] rec.
 Proof. 
-  simpl. unfold compute_grid. unfold gen_rec_full.
+  simpl. unfold compute_grid. unfold gen_rec_full. 
   unfold gen_rec_wrapper. unfold gen_rec. simpl.
   reflexivity.
 Qed.
 
-Example decoupled_3D_good:
+Example equivalence_3D_good:
   let rec := (fun i j k C => set_Z C [i; j; k] (C _[i; j; k-1] + i + j + k)%Z) in
   compute_grid 3 [2%Z; 2%Z; 2%Z] rec = gen_rec_full 3 [2%Z; 2%Z; 2%Z] rec.
 Proof.
@@ -1109,37 +1152,8 @@ Proof.
   reflexivity.
 Qed.
 
-Lemma fold_left_gen_grid_destruct `{TensorElem X}:
-  forall (n: nat) (d0: Z) (d': list Z) (arr : X) (rec: Z^^(S n) --> (X -> X)),
-  n = length d' -> 
-  fold_left
-    (
-      fun arr0 coord =>
-        nuncurry _ _ (S n) rec (Z_nprod_of_list (S n) coord) arr0
-    )
-    (gen_grid_helper (d0 :: d'))
-    arr =
-  fold_left 
-    (
-      fun arr ind =>
-        fold_left 
-          (
-            fun arr' coord =>
-              nuncurry _ _ n (rec ind) (Z_nprod_of_list n coord) arr'
-          )
-          (gen_grid_helper d')
-          arr
-    )
-    (gen_range 0 d0)
-    arr.
-Proof.
-  intros. unfold gen_grid_helper. rewrite flat_map_fold.
-  fold (gen_grid_helper d'). apply fold_left_same_fn.
-  intros. apply map_in_fold_left.
-Qed.
-
-Lemma decoupled_nd_helper `{TensorElem X}:
-  forall (n: nat) (dims: list Z) (rec: Z^^n --> (X -> X)) (arr: X),
+Lemma equivalence_nd_helper `{TensorElem X}:
+  forall (n: nat) (dims: list Z) (rec: Z^^n --> (list X -> list X)) (arr: list X),
   n = length dims ->
   gen_rec_wrapper n dims rec arr = 
   compute_grid_helper n (gen_grid_helper dims) rec arr.
@@ -1163,8 +1177,9 @@ Proof.
     destruct dims. {
       discriminate H0.
     }
-    unfold compute_grid_helper. symmetry. apply fold_left_gen_grid_destruct.
-    auto.
+    unfold compute_grid_helper. symmetry. unfold gen_grid_helper. rewrite flat_map_fold_left.
+    fold (gen_grid_helper (tl (z :: dims))). apply fold_left_same_fn.
+    intros. apply map_fold_left.
     {
       apply fold_left_same_fn. intros. symmetry. apply IHn'. destruct dims.
       - discriminate H0.
@@ -1172,40 +1187,25 @@ Proof.
     }
   Qed.
 
-Lemma decoupled_nd_same_behavior `{TensorElem X}:
-  forall (n: nat) (dims: list Z) (rec: Z^^n --> (X -> X)),
+Lemma equivalence_nd `{TensorElem X}:
+  forall (n: nat) (dims: list Z) (rec: Z^^n --> (list X -> list X)),
     n = length dims ->
     gen_rec_full n dims rec = compute_grid n dims rec.
 Proof.
   intros n dims rec.
   unfold compute_grid.
   unfold gen_rec_full.
-  apply decoupled_nd_helper.
+  apply equivalence_nd_helper.
 Qed.
 
-Compute (
-  let rec := fun i j C => 
-    set_Z C [i; j] 
-      (
-        |{i >=? j}| (
-          |{orb (j =? 0) (i =? j)}| 1 + 
-          |{andb (negb (j =? 0)) (j <? i)}| (C _[i-1; j] + C _[i-1; j-1])
-        )
-      )%Z in
-  gen_rec_full 2 [4%Z; 4%Z] rec).
+(* No self reference *)
 
-Compute (
-let rec := fun i C => 
-  set_Z C [i] 
-    (
-      i + 13
-    )%Z in
-compute_grid 1 [10%Z] rec).
-
-Example no_self_recurrence:
+Example gen_equivalence_2d:
   let rec := (fun i j C => set_Z C [i; j] (i + j)%Z) in
-  compute_grid 2 [4%Z; 4%Z] rec = gen_rec_full 2 [4%Z; 4%Z] rec. 
-
+  gen_rec_full 2 [4%Z; 4%Z] rec = GEN [i < 4] GEN [j < 4] (i + j)%Z.
+Proof.
+  simpl. reflexivity.
+Qed.
 (* 
   (gen_rec n (fun i => e))
   (at level 36,
